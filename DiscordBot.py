@@ -52,12 +52,11 @@ async def print_sales():
         ozb.save_sales(new_sales)
 
         # Send the sales, mentioning the role.
-        channel = bot.get_channel(578867046587301889)
-        msg = '<@&662906994969280533>\n'
+        channel = bot.get_channel(662929547427315722)
+        await channel.send('<@&662906994969280533>')
         for sale in new_sales:
-            msg += f'{sale["link"].replace("goto", "node")}\n'
-
-        await channel.send(msg)
+            msg = f'{sale["link"].replace("goto", "node")}\n'
+            await channel.send(msg)
 
 
 bot.run(token)

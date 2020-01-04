@@ -24,8 +24,8 @@ class OzBargain():
     conn = sqlite3.connect(SALES_DB)
 
     def get_ebay_sales(self):
-        res = requests.get('https://www.ozbargain.com.au/tag/ebay-sale/feed')
-        #res = requests.get('https://www.ozbargain.com.au/cat/computing/deals/feed')
+        #res = requests.get('https://www.ozbargain.com.au/tag/ebay-sale/feed')
+        res = requests.get('https://www.ozbargain.com.au/cat/computing/deals/feed')
         if not res:
             return []
 
