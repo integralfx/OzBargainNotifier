@@ -3,9 +3,14 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 import pytz
 import sqlite3
+import discord
+from discord.ext import commands, tasks
 
 SALES_DB = 'sales.db'
 conn = sqlite3.connect(SALES_DB)
+
+MY_USER_ID = 206640727797530624
+bot = commands.Bot(command_prefix='!')
 
 def get_ebay_sales():
     res = requests.get('https://www.ozbargain.com.au/tag/ebay-sale/feed')
@@ -35,6 +40,9 @@ def get_ebay_sales():
 
 
 def save_sales(sales):
+    if len(sales) == 0:
+        return
+
     with conn:
         sql = 'INSERT OR REPLACE INTO Sales(id, last_update, title, link, expiry, date_published, creator) VALUES'
         for sale in sales:
@@ -65,8 +73,73 @@ def load_sales():
         return sales
 
 
-if __name__ == '__main__':
-    for sale in load_sales():
-        if datetime.now(tz=pytz.UTC) > sale['expiry']:
-            print(f'{"[Expired]"} {sale["id"]}')
-        #print(f'{"Expired " if datetime.utcnow() > sale["expiry"] else ""}{sale["id"]}')
+def delete_sale(sale_id):
+    with conn:
+        cur = conn.cursor()
+        cur.execute(f'DELETE FROM Sales WHERE id=?', (sale_id,))
+        conn.commit()
+
+
+def has_expired(sale):
+    return datetime.now(tz=pytz.UTC) > sale['expiry']
+
+
+def sale_exists(sale_id, sales):
+    for sale in sales:
+        if int(sale_id) == int(sale['id']):
+            return True
+
+    return False
+
+
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user}')
+    print_sales.start()
+
+
+@bot.command()
+async def quit(ctx):
+    if ctx.author.id == MY_USER_ID:
+        print('Quitting...')
+        await ctx.send('Bye! 👋')
+        print_sales.cancel()
+        await bot.close()
+
+
+@bot.command()
+async def delete(ctx, sale_id):
+    if ctx.author.id != MY_USER_ID:
+        return
+
+    if sale_id.isdigit():
+        if sale_exists(sale_id, load_sales()):
+            delete_sale(sale_id)
+            await ctx.send(f'Sale {sale_id} successfully deleted')
+            return
+
+    await ctx.send('Invalid sale ID')
+
+
+
+@tasks.loop(seconds=1.0)
+async def print_sales():
+    db_sales = [x for x in load_sales() if not has_expired(x)]
+    # Get the eBay sales from OzBargain that haven't expired.
+    ozb_sales = [x for x in get_ebay_sales() if not has_expired(x)]
+    # Sales that haven't been added to the database haven't been sent yet.
+    new_sales = [x for x in ozb_sales if not sale_exists(x['id'], db_sales)]
+
+    # Add the new sales to the database.
+    save_sales(new_sales)
+
+    # Send the sales.
+    channel = bot.get_channel(578867046587301889)
+    msg = ''
+    for sale in new_sales:
+        msg += f'{sale["id"]}: {sale["title"]}\n'
+
+    await channel.send(msg)
+
+
+bot.run('NTc4ODY2Njk0OTQxMDQ4ODMy.XN51vQ.Z2KmxPrgoPP3IT-U5gHxXUAjBM4')
