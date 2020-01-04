@@ -122,7 +122,7 @@ async def delete(ctx, sale_id):
 
 
 
-@tasks.loop(seconds=1.0)
+@tasks.loop(minutes=1.0)
 async def print_sales():
     db_sales = [x for x in load_sales() if not has_expired(x)]
     # Get the eBay sales from OzBargain that haven't expired.
@@ -130,16 +130,17 @@ async def print_sales():
     # Sales that haven't been added to the database haven't been sent yet.
     new_sales = [x for x in ozb_sales if not sale_exists(x['id'], db_sales)]
 
-    # Add the new sales to the database.
-    save_sales(new_sales)
+    if len(new_sales) > 0:
+        # Add the new sales to the database.
+        save_sales(new_sales)
 
-    # Send the sales.
-    channel = bot.get_channel(578867046587301889)
-    msg = ''
-    for sale in new_sales:
-        msg += f'{sale["id"]}: {sale["title"]}\n'
+        # Send the sales, mentioning the role.
+        channel = bot.get_channel(578867046587301889)
+        msg = '<@&662906994969280533>\n'
+        for sale in new_sales:
+            msg += f'https://www.ozbargain.com.au/node/{sale["id"]}\n'
 
-    await channel.send(msg)
+        await channel.send(msg)
 
 
 bot.run('NTc4ODY2Njk0OTQxMDQ4ODMy.XN51vQ.Z2KmxPrgoPP3IT-U5gHxXUAjBM4')
