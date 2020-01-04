@@ -3,86 +3,109 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 import pytz
 import sqlite3
+import codecs
 
-SALES_DB = 'sales.db'
-conn = sqlite3.connect(SALES_DB)
+def escape(s, errors="strict"):
+    encodable = s.encode("utf-8", errors).decode("utf-8")
 
-def get_ebay_sales():
-    #res = requests.get('https://www.ozbargain.com.au/tag/ebay-sale/feed')
-    res = requests.get('https://www.ozbargain.com.au/cat/computing/deals/feed')
-    if not res:
-        return []
+    nul_index = encodable.find("\x00")
 
-    sales = []
-    root = ET.fromstring(res.content)
-    for item in root[0].findall('item'):
-        sale = {}
+    if nul_index >= 0:
+        error = UnicodeEncodeError("NUL-terminated utf-8", encodable,
+                                   nul_index, nul_index + 1, "NUL not allowed")
+        error_handler = codecs.lookup_error(errors)
+        replacement, _ = error_handler(error)
+        encodable = encodable.replace("\x00", replacement)
 
-        sale['title'] = item.find('title').text
-        sale['description'] = item.find('description').text
-        link = item.find('link').text
-        sale['id'] = int(link[link.find('node/') + len('node/'):])
-        sale['date_published'] = datetime.strptime(item.find('pubDate').text, '%a, %d %b %Y %H:%M:%S %z')
+    return "\"" + encodable.replace("\"", "\"\"") + "\""
 
-        meta = item.find('{https://www.ozbargain.com.au}meta')
-        sale['link'] = meta.get('link')
-        sale['expiry'] = datetime.fromisoformat(meta.get('expiry'))
+class OzBargain():
+    SALES_DB = 'sales.db'
+    conn = sqlite3.connect(SALES_DB)
 
-        sale['creator'] = item.find('{http://purl.org/dc/elements/1.1/}creator').text
+    def get_ebay_sales(self):
+        res = requests.get('https://www.ozbargain.com.au/tag/ebay-sale/feed')
+        #res = requests.get('https://www.ozbargain.com.au/cat/computing/deals/feed')
+        if not res:
+            return []
 
-        sales.append(sale)
-
-    return sales
-
-
-def save_sales(sales):
-    if len(sales) == 0:
-        return
-
-    with conn:
-        sql = 'INSERT OR REPLACE INTO Sales(id, last_update, title, link, expiry, date_published, creator) VALUES'
-        for sale in sales:
-            sql += f'({sale["id"]}, "{datetime.utcnow().isoformat()}", "{sale["title"]}", "{sale["link"]}", \
-                     "{sale["expiry"].isoformat()}", "{sale["date_published"].isoformat()}", "{sale["creator"]}"), '
-
-        cur = conn.cursor()
-        cur.execute(sql[:-2])
-
-
-def load_sales():
-    with conn:
-        cur = conn.cursor()
-        cur.execute('SELECT * FROM Sales')
         sales = []
-        for row in cur.fetchall():
-            sale = {
-                'id': int(row[0]),
-                'last_update': datetime.fromisoformat(row[1]),
-                'title': row[2],
-                'link': row[3],
-                'expiry': datetime.fromisoformat(row[4]),
-                'date_published': datetime.fromisoformat(row[5]),
-                'creator': row[6]
-            }
+        root = ET.fromstring(res.content)
+        for item in root[0].findall('item'):
+            sale = {}
+
+            sale['title'] = item.find('title').text
+            sale['description'] = item.find('description').text
+            link = item.find('link').text
+            sale['id'] = int(link[link.find('node/') + len('node/'):])
+            sale['date_published'] = datetime.strptime(item.find('pubDate').text, '%a, %d %b %Y %H:%M:%S %z')
+
+            meta = item.find('{https://www.ozbargain.com.au}meta')
+            sale['link'] = meta.get('link')
+            expiry = meta.get('expiry')
+            sale['expiry'] = datetime.fromisoformat(expiry) if expiry else None
+
+            sale['creator'] = item.find('{http://purl.org/dc/elements/1.1/}creator').text
+
             sales.append(sale)
 
         return sales
 
 
-def delete_sale(sale_id):
-    with conn:
-        cur = conn.cursor()
-        cur.execute(f'DELETE FROM Sales WHERE id=?', (sale_id,))
-        conn.commit()
+    def save_sales(self, sales):
+        if len(sales) == 0:
+            return
+
+        with self.conn:
+            sql = 'INSERT OR REPLACE INTO Sales(id, last_update, title, link, expiry, date_published, creator) VALUES'
+            for sale in sales:
+                expiry = f'"{sale["expiry"].isoformat()}"' if sale['expiry'] else 'NULL'
+                sql += f'({sale["id"]}, "{datetime.utcnow().isoformat()}", {escape(sale["title"])}, "{sale["link"]}", '
+                sql += f'{expiry}, "{sale["date_published"].isoformat()}", "{sale["creator"]}"), '
+            
+            cur = self.conn.cursor()
+            cur.execute(sql[:-2])
 
 
-def has_expired(sale):
-    return datetime.now(tz=pytz.UTC) > sale['expiry']
+    def load_sales(self):
+        with self.conn:
+            cur = self.conn.cursor()
+            cur.execute('SELECT * FROM Sales')
+            sales = []
+            for row in cur.fetchall():
+                sale = {
+                    'id': int(row[0]),
+                    'last_update': datetime.fromisoformat(row[1]),
+                    'title': row[2],
+                    'link': row[3],
+                    'expiry': datetime.fromisoformat(row[4]) if row[4] else None,
+                    'date_published': datetime.fromisoformat(row[5]),
+                    'creator': row[6]
+                }
+                sales.append(sale)
+
+            return sales
 
 
-def sale_exists(sale_id, sales):
-    for sale in sales:
-        if int(sale_id) == int(sale['id']):
-            return True
+    def delete_sale(self, sale_id):
+        with self.conn:
+            cur = self.conn.cursor()
+            cur.execute(f'DELETE FROM Sales WHERE id=?', (sale_id,))
+            self.conn.commit()
 
-    return False
+
+    def has_expired(self, sale):
+        if not sale or not sale['expiry']:
+            return False
+        return datetime.now(tz=pytz.UTC) > sale['expiry']
+
+
+    def sale_exists(self, sale_id, sales=[]):
+        if len(sales) == 0:
+            sales = self.load_sales()
+
+        for sale in sales:
+            if int(sale_id) == int(sale['id']):
+                return True
+
+        return False
