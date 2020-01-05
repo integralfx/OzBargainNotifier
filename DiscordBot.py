@@ -12,7 +12,7 @@ with open('token.txt') as file:
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
-    print_sales.start()
+    send_sales.start()
 
 
 @bot.command()
@@ -20,7 +20,7 @@ async def quit(ctx):
     if ctx.author.id == MY_USER_ID:
         print('Quitting...')
         await ctx.send('Bye! 👋')
-        print_sales.cancel()
+        send_sales.cancel()
         await bot.close()
 
 
@@ -38,9 +38,8 @@ async def delete(ctx, sale_id):
     await ctx.send('Invalid sale ID')
 
 
-
 @tasks.loop(minutes=1.0)
-async def print_sales():
+async def send_sales():
     db_sales = [x for x in ozb.load_sales() if not ozb.has_expired(x)]
     # Get the eBay sales from OzBargain that haven't expired.
     ozb_sales = [x for x in ozb.get_ebay_sales() if not ozb.has_expired(x)]
