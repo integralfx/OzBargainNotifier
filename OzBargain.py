@@ -42,6 +42,13 @@ class OzBargain():
             link = item.find('link').text
             sale['id'] = int(link[link.find('node/') + len('node/'):])
             sale['date_published'] = datetime.strptime(item.find('pubDate').text, '%a, %d %b %Y %H:%M:%S %z')
+            
+            sale['categories'] = []
+            for cat in item.findall('category'):
+                sale['categories'].append({
+                    'name': cat.text,
+                    'link': cat.get('domain')
+                })
 
             meta = item.find('{https://www.ozbargain.com.au}meta')
             sale['link'] = meta.get('link')
@@ -112,3 +119,32 @@ class OzBargain():
                 return True
 
         return False
+
+
+    def load_categories(self):
+        with self.conn:
+            cur = self.conn.cursor()
+            cur.execute('SELECT * FROM Category')
+            categories = []
+            for row in cur.fetchall():
+                category = {
+                    'id': int(row[0]),
+                    'name': row[1],
+                    'link': row[2]
+                }
+                categories.append(category)
+
+            return categories
+
+
+    def save_categories(self, categories):
+        if len(categories) == 0:
+            return
+
+        with self.conn:
+            sql = 'INSERT OR REPLACE INTO Category(name, link) VALUES'
+            for category in categories:
+                sql += f'({escape(category["name"])}, {category["link"]}), '
+            
+            cur = self.conn.cursor()
+            cur.execute(sql[:-2])
