@@ -40,6 +40,7 @@ class OzBargain():
             sale['title'] = item.find('title').text
             sale['description'] = item.find('description').text
             link = item.find('link').text
+            sale['link'] = link
             sale['id'] = int(link[link.find('node/') + len('node/'):])
             sale['date_published'] = datetime.strptime(item.find('pubDate').text, '%a, %d %b %Y %H:%M:%S %z')
             
@@ -51,7 +52,6 @@ class OzBargain():
                 })
 
             meta = item.find('{https://www.ozbargain.com.au}meta')
-            sale['link'] = meta.get('link')
             expiry = meta.get('expiry')
             sale['expiry'] = datetime.fromisoformat(expiry) if expiry else None
 

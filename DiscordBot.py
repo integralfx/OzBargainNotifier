@@ -56,7 +56,7 @@ async def send_sales():
         channel = bot.get_channel(SALES_CHANNEL_ID)
         await channel.send(ROLE_MENTION)
         for sale in new_sales:
-            msg = f'{sale["link"].replace("goto", "node")}\n'
+            msg = f'{sale["link"]}\n'
             await channel.send(msg)
 
 
