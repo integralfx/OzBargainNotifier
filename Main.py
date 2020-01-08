@@ -12,7 +12,14 @@ if __name__ == '__main__':
 
     # ozb.save_sales(new_sales)
 
-    for sale in ozb.get_ebay_sales():
-        print(sale['title'])
+    # sales = ozb.get_ebay_sales()
+    # for sale in sales:
+    #     print(sale['title'])
+    #     for cat in sale['categories']:
+    #         print(f'\t{cat["name"]} | {cat["link"]}')
+    # ozb.save_sales(sales)
+
+    for sale in ozb.load_sales():
+        print(f'{sale["title"]} | {sale["link"]}')
         for cat in sale['categories']:
-            print(f'\t{cat["name"]}')
+            print(f'\t{cat["name"]} | {cat["link"]}')

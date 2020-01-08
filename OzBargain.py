@@ -21,7 +21,7 @@ def escape(s, errors="strict"):
 
 
 '''
-TODO: Get categories
+TODO: Use PostgreSQL
 '''
 class OzBargain():
     SALES_DB = 'sales.db'
@@ -69,6 +69,16 @@ class OzBargain():
         with self.conn:
             sql = 'INSERT OR REPLACE INTO Sales(id, last_update, title, link, expiry, date_published, creator) VALUES'
             for sale in sales:
+                if len(sale['categories']) > 0:
+                    cat_sql = 'INSERT OR IGNORE INTO Category(name, link) VALUES'
+                    map_sql = f'INSERT OR IGNORE INTO SalesCategory(sales_id, category_id) SELECT {sale["id"]}, id from Category WHERE '
+                    for category in sale['categories']:
+                        cat_sql += f'({escape(category["name"])}, "{category["link"]}"), '
+                        map_sql += f'name={escape(category["name"])} OR '
+                    cur = self.conn.cursor()
+                    cur.execute(cat_sql[:-2])
+                    cur.execute(map_sql[:-4])
+
                 expiry = f'"{sale["expiry"].isoformat()}"' if sale['expiry'] else 'NULL'
                 sql += f'({sale["id"]}, "{datetime.utcnow().isoformat()}", {escape(sale["title"])}, "{sale["link"]}", '
                 sql += f'{expiry}, "{sale["date_published"].isoformat()}", "{sale["creator"]}"), '
@@ -83,6 +93,11 @@ class OzBargain():
             cur.execute('SELECT * FROM Sales')
             sales = []
             for row in cur.fetchall():
+                # Get the categories
+                sql = f'SELECT c.name, c.link FROM Category c, SalesCategory sc WHERE sc.sales_id={int(row[0])} AND '
+                sql += 'c.id=sc.category_id'
+                cur.execute(sql)
+
                 sale = {
                     'id': int(row[0]),
                     'last_update': datetime.fromisoformat(row[1]),
@@ -90,7 +105,8 @@ class OzBargain():
                     'link': row[3],
                     'expiry': datetime.fromisoformat(row[4]) if row[4] else None,
                     'date_published': datetime.fromisoformat(row[5]),
-                    'creator': row[6]
+                    'creator': row[6],
+                    'categories': [{ 'name': r[0], 'link': r[1] } for r in cur.fetchall()]
                 }
                 sales.append(sale)
 
